@@ -47,38 +47,52 @@ function hae_admin_page() {
 /**
  * Handle Export
  */
-add_action( 'admin_post_hae_export_csv', 'hae_export_csv' );
+add_action( 'admin_post_wc_hear_export_xlsx', 'wc_hear_export_xlsx' );
 
-function hae_export_csv() {
+function wc_hear_export_xlsx() {
 
-    if ( ! current_user_can( 'manage_options' ) ) {
-        wp_die( 'Unauthorized user' );
+    if ( ! current_user_can( 'manage_woocommerce' ) ) {
+        wp_die( 'Unauthorized' );
     }
 
-    header( 'Content-Type: text/csv' );
-    header( 'Content-Disposition: attachment; filename="hear-about-data.csv"' );
-    header( 'Pragma: no-cache' );
-    header( 'Expires: 0' );
+    if ( ! class_exists( '\PhpOffice\PhpSpreadsheet\Spreadsheet' ) ) {
+        wp_die( 'PhpSpreadsheet not installed.' );
+    }
 
-    $output = fopen( 'php://output', 'w' );
+    $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+    $sheet = $spreadsheet->getActiveSheet();
 
-    // Column headers
-    fputcsv( $output, array( 'Email', 'How did you hear about us?' ) );
+    // Headers
+    $sheet->setCellValue('A1', 'Order ID');
+    $sheet->setCellValue('B1', 'Email');
+    $sheet->setCellValue('C1', 'Hear About');
 
-    $users = get_users();
+    $orders = wc_get_orders( array(
+        'limit'  => -1,
+        'status' => array( 'wc-completed', 'wc-processing' ),
+    ) );
 
-    foreach ( $users as $user ) {
+    $row = 2;
 
-        $hear_about = get_user_meta( $user->ID, 'how_did_you_hear', true );
+    foreach ( $orders as $order ) {
+
+        $hear_about = $order->get_meta( 'hear_about' );
 
         if ( ! empty( $hear_about ) ) {
-            fputcsv( $output, array(
-                $user->user_email,
-                $hear_about
-            ));
+
+            $sheet->setCellValue( 'A' . $row, $order->get_id() );
+            $sheet->setCellValue( 'B' . $row, $order->get_billing_email() );
+            $sheet->setCellValue( 'C' . $row, $hear_about );
+
+            $row++;
         }
     }
 
-    fclose( $output );
+    header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    header('Content-Disposition: attachment;filename="wc-hear-about-orders.xlsx"');
+    header('Cache-Control: max-age=0');
+
+    $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
+    $writer->save('php://output');
     exit;
 }
