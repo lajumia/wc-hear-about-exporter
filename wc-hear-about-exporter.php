@@ -31,15 +31,67 @@ function hae_add_admin_menu() {
  * Admin Page UI
  */
 function hae_admin_page() {
+
+    if ( ! current_user_can( 'manage_woocommerce' ) ) {
+        return;
+    }
+
+    $orders = wc_get_orders( array(
+        'limit'  => 50, // preview only first 50
+        'status' => array( 'wc-completed', 'wc-processing' ),
+    ) );
+
     ?>
     <div class="wrap">
         <h1>Export "How did you hear about us?" Data</h1>
-        <p>Click the button below to download Excel file.</p>
 
-        <a href="<?php echo admin_url( 'admin-post.php?action=hae_export_csv' ); ?>" 
+        <table class="widefat fixed striped" style="margin-top:20px;">
+            <thead>
+                <tr>
+                    <th>Order ID</th>
+                    <th>Email</th>
+                    <th>Hear About</th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php
+                if ( ! empty( $orders ) ) :
+
+                    foreach ( $orders as $order ) :
+
+                        $hear_about = $order->get_meta( 'hear_about' );
+
+                        if ( empty( $hear_about ) ) {
+                            continue;
+                        }
+                        ?>
+                        <tr>
+                            <td><?php echo esc_html( $order->get_id() ); ?></td>
+                            <td><?php echo esc_html( $order->get_billing_email() ); ?></td>
+                            <td><?php echo esc_html( $hear_about ); ?></td>
+                        </tr>
+                        <?php
+
+                    endforeach;
+
+                else :
+                    ?>
+                    <tr>
+                        <td colspan="3">No data found.</td>
+                    </tr>
+                    <?php
+                endif;
+                ?>
+            </tbody>
+        </table>
+
+        <br>
+
+        <a href="<?php echo admin_url( 'admin-post.php?action=wc_hear_export_xlsx' ); ?>" 
            class="button button-primary">
-            Download Excel File
+            Export as XLSX
         </a>
+
     </div>
     <?php
 }
