@@ -26,49 +26,58 @@ function hae_add_admin_menu() {
 function hae_admin_page() {
     global $wpdb;
 
-    echo '<div class="wrap">';
-    echo '<h1>Preview "How Did You Hear About Us?" Data</h1>';
+    $preview_limit = 20;
 
-        // --- Summary Header ---
-    // Total number of orders with the meta key
+    // Fetch data
     $total_orders = $wpdb->get_var($wpdb->prepare("
         SELECT COUNT(*) 
         FROM {$wpdb->prefix}postmeta
         WHERE meta_key = %s
     ", 'How Did You Hear About Us?'));
 
-    $preview_limit = 20; // number of rows in preview
-
-    echo '<div style="display:flex; gap:40px; margin-bottom:20px; align-items:center;">';
-
-    echo '<div><strong>Total orders:</strong> ' . esc_html($total_orders) . '</div>';
-    echo '<div><strong>Showing latest:</strong> ' . esc_html($preview_limit) . ' orders</div>';
-    echo '<div><strong>Last updated:</strong> ' . esc_html(date('Y-m-d H:i:s')) . '</div>';
-
-    echo '</div>';
-
-    // Table header
-    echo '<table class="widefat fixed striped" style="margin-top:20px;">';
-    echo '<thead>
-            <tr>
-                <th>Order ID</th>
-                <th>Email</th>
-                <th>How Did You Hear About Us?</th>
-            </tr>
-          </thead>';
-    echo '<tbody>';
-
-    // Fetch first 20 orders with this meta key
-    $order_ids = $wpdb->get_col("
+    $order_ids = $wpdb->get_col($wpdb->prepare("
         SELECT post_id 
         FROM {$wpdb->prefix}postmeta 
-        WHERE meta_key = 'How Did You Hear About Us?'
+        WHERE meta_key = %s
         ORDER BY post_id DESC
-        LIMIT 20
-    ");
+        LIMIT %d
+    ", 'How Did You Hear About Us?', $preview_limit));
+
+    // --- Admin CSS for modern SaaS look ---
+    echo '<style>
+        .hae-summary { display:flex; gap:20px; margin-bottom:30px; flex-wrap:wrap; }
+        .hae-card { background:#fff; padding:20px 25px; border-radius:12px; flex:1; min-width:200px; text-align:center; box-shadow:0 4px 12px rgba(0,0,0,0.05); }
+        .hae-card-title { color:#6b7280; font-size:14px; font-weight:500; margin-bottom:5px; }
+        .hae-card-value { font-size:22px; font-weight:700; color:#111827; }
+        .hae-table-container { overflow-x:auto; border-radius:12px; box-shadow:0 4px 12px rgba(0,0,0,0.05); }
+        .hae-table { width:100%; border-collapse:collapse; font-size:14px; min-width:600px; }
+        .hae-table thead tr { background:linear-gradient(90deg,#4f46e5,#3b82f6); color:#fff; text-align:left; }
+        .hae-table th, .hae-table td { padding:12px 15px; }
+        .hae-table tbody tr:nth-child(even) { background:#f9fafb; }
+        .hae-table tbody tr:nth-child(odd) { background:#ffffff; }
+        .hae-table tbody tr:hover { background:#e0e7ff; }
+        .hae-btn { display:inline-block; background:linear-gradient(90deg,#4f46e5,#3b82f6); color:#fff; font-weight:700; padding:12px 28px; border-radius:8px; text-decoration:none; box-shadow:0 4px 12px rgba(0,0,0,0.15); transition:0.3s; }
+        .hae-btn:hover { background:linear-gradient(90deg,#4338ca,#2563eb); }
+    </style>';
+
+    echo '<div class="wrap" style="font-family:Arial, sans-serif; max-width:1200px; margin:0 auto;">';
+    echo '<h1 style="margin-bottom:30px; font-size:30px; color:#1f2937;">Hear About Us Data Preview</h1>';
+
+    // --- Summary ---
+    echo '<div class="hae-summary">';
+    echo '<div class="hae-card"><div class="hae-card-title">Total Orders</div><div class="hae-card-value">' . esc_html($total_orders) . '</div></div>';
+    echo '<div class="hae-card"><div class="hae-card-title">Showing Latest</div><div class="hae-card-value">' . esc_html($preview_limit) . '</div></div>';
+    echo '<div class="hae-card"><div class="hae-card-title">Last Updated</div><div class="hae-card-value">' . esc_html(date('Y-m-d H:i:s')) . '</div></div>';
+    echo '</div>';
+
+    // --- Table ---
+    echo '<div class="hae-table-container">';
+    echo '<table class="hae-table">';
+    echo '<thead><tr><th>Order ID</th><th>Email</th><th>How Did You Hear About Us?</th></tr></thead>';
+    echo '<tbody>';
 
     if (empty($order_ids)) {
-        echo '<tr><td colspan="3">No data found.</td></tr>';
+        echo '<tr><td colspan="3" style="padding:12px; text-align:center;">No data found.</td></tr>';
     } else {
         foreach ($order_ids as $order_id) {
             $order = wc_get_order($order_id);
@@ -81,23 +90,22 @@ function hae_admin_page() {
                 'How Did You Hear About Us?'
             ));
 
-            echo "<tr>";
-            echo "<td>" . esc_html($order_id) . "</td>";
-            echo "<td>" . esc_html($email) . "</td>";
-            echo "<td>" . esc_html($hear_about) . "</td>";
-            echo "</tr>";
+            echo '<tr>';
+            echo '<td>' . esc_html($order_id) . '</td>';
+            echo '<td>' . esc_html($email) . '</td>';
+            echo '<td>' . esc_html($hear_about) . '</td>';
+            echo '</tr>';
         }
     }
 
-    echo '</tbody></table>';
+    echo '</tbody></table></div>';
 
-    // JSON Export Button
-    echo '<br>';
-    echo '<a href="' . admin_url('admin-post.php?action=wc_hear_export_json') . '" class="button button-primary">
-            Export All as JSON
-          </a>';
-
+    // --- JSON Export Button ---
+    echo '<div style="margin-top:25px;">';
+    echo '<a href="' . admin_url('admin-post.php?action=wc_hear_export_json') . '" class="hae-btn">Export All as JSON</a>';
     echo '</div>';
+
+    echo '</div>'; // wrap
 }
 
 // Handle JSON Export
