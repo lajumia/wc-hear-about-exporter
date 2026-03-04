@@ -1,25 +1,15 @@
 <?php
 /**
  * Plugin Name: Hear About Us Exporter
- * Description: Export "How did you hear about us?" data with email to Excel.
- * Version: 1.0.0
+ * Description: Preview and export "How Did You Hear About Us?" data as JSON.
+ * Version: 1.0.1
  * Author: Md Laju Miah
- * Author URI: https://profiles.wordpress.org/devlaju/
- * License:           GPL v2 or later
- * License URI:       https://www.gnu.org/licenses/gpl-2.0.html
- * Requires at least: 6.0
- * Requires PHP:      7.4
  */
 
-if ( ! defined( 'ABSPATH' ) ) {
-    exit;
-}
+if (!defined('ABSPATH')) exit; // security
 
-/**
- * Add Admin Menu
- */
-add_action( 'admin_menu', 'hae_add_admin_menu' );
-
+// Add Admin Menu
+add_action('admin_menu', 'hae_add_admin_menu');
 function hae_add_admin_menu() {
     add_menu_page(
         'Hear About Export',
@@ -32,21 +22,14 @@ function hae_add_admin_menu() {
     );
 }
 
-/**
- * Admin Page UI
- */
+// Admin Page UI: preview table + JSON export
 function hae_admin_page() {
-
     global $wpdb;
 
     echo '<div class="wrap">';
-    echo '<h1>Export "How Did You Hear About Us?" Data</h1>';
+    echo '<h1>Preview "How Did You Hear About Us?" Data</h1>';
 
-    if ( ! function_exists( 'wc_get_orders' ) ) {
-        echo '<p>WooCommerce not loaded.</p></div>';
-        return;
-    }
-
+    // Table header
     echo '<table class="widefat fixed striped" style="margin-top:20px;">';
     echo '<thead>
             <tr>
@@ -57,16 +40,66 @@ function hae_admin_page() {
           </thead>';
     echo '<tbody>';
 
-    // Get all order IDs with this meta
+    // Fetch first 20 orders with this meta key
     $order_ids = $wpdb->get_col("
         SELECT post_id 
         FROM {$wpdb->prefix}postmeta 
         WHERE meta_key = 'How Did You Hear About Us?'
+        ORDER BY post_id DESC
         LIMIT 20
     ");
 
+    if (empty($order_ids)) {
+        echo '<tr><td colspan="3">No data found.</td></tr>';
+    } else {
+        foreach ($order_ids as $order_id) {
+            $order = wc_get_order($order_id);
+            if (!$order) continue;
+
+            $email = $order->get_billing_email();
+            $hear_about = $wpdb->get_var($wpdb->prepare(
+                "SELECT meta_value FROM {$wpdb->prefix}postmeta WHERE post_id = %d AND meta_key = %s",
+                $order_id,
+                'How Did You Hear About Us?'
+            ));
+
+            echo "<tr>";
+            echo "<td>" . esc_html($order_id) . "</td>";
+            echo "<td>" . esc_html($email) . "</td>";
+            echo "<td>" . esc_html($hear_about) . "</td>";
+            echo "</tr>";
+        }
+    }
+
+    echo '</tbody></table>';
+
+    // JSON Export Button
+    echo '<br>';
+    echo '<a href="' . admin_url('admin-post.php?action=wc_hear_export_json') . '" class="button button-primary">
+            Export All as JSON
+          </a>';
+
+    echo '</div>';
+}
+
+// Handle JSON Export
+add_action('admin_post_wc_hear_export_json', 'wc_hear_export_json');
+function wc_hear_export_json() {
+    if (!current_user_can('manage_woocommerce')) wp_die('Unauthorized');
+
+    global $wpdb;
+
+    $order_ids = $wpdb->get_col($wpdb->prepare("
+        SELECT post_id
+        FROM {$wpdb->prefix}postmeta
+        WHERE meta_key = %s
+    ", 'How Did You Hear About Us?'));
+
+    $data = [];
     foreach ($order_ids as $order_id) {
         $order = wc_get_order($order_id);
+        if (!$order) continue;
+
         $email = $order->get_billing_email();
         $hear_about = $wpdb->get_var($wpdb->prepare(
             "SELECT meta_value FROM {$wpdb->prefix}postmeta WHERE post_id = %d AND meta_key = %s",
@@ -74,87 +107,25 @@ function hae_admin_page() {
             'How Did You Hear About Us?'
         ));
 
-        echo "<tr>";
-        echo "<td>" . esc_html($order_id) . "</td>";
-        echo "<td>" . esc_html($email) . "</td>";
-        echo "<td>" . esc_html($hear_about) . "</td>";
-        echo "</tr>";
+        if (empty($hear_about)) continue;
+
+        $data[] = [
+            'order_id' => $order_id,
+            'email' => $email,
+            'hear_about' => $hear_about,
+        ];
     }
 
-    echo '</tbody></table>';
+    // Clear output buffer to prevent blank JSON issues
+    if (ob_get_length()) ob_end_clean();
 
-    echo '<br>';
+    // JSON headers for download
+    header('Content-Type: application/json');
+    header('Content-Disposition: attachment; filename="hear-about-orders.json"');
+    header('Cache-Control: no-cache, no-store, must-revalidate');
+    header('Pragma: no-cache');
+    header('Expires: 0');
 
-    // Export button
-    echo '<a href="' . admin_url('admin-post.php?action=wc_hear_export_xlsx') . '" 
-              class="button button-primary">
-              Export as XLSX
-          </a>';
-
-    echo '</div>';
-}
-
-/**
- * Handle Export
- */
-add_action( 'admin_post_wc_hear_export_xlsx', 'wc_hear_export_xlsx' );
-
-function wc_hear_export_xlsx() {
-
-    if ( ! current_user_can( 'manage_woocommerce' ) ) {
-        wp_die( 'Unauthorized' );
-    }
-
-    if ( ! class_exists( '\PhpOffice\PhpSpreadsheet\Spreadsheet' ) ) {
-        wp_die( 'PhpSpreadsheet not installed.' );
-    }
-
-    global $wpdb;
-
-    $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
-    $sheet = $spreadsheet->getActiveSheet();
-
-    // Headers
-    $sheet->setCellValue('A1', 'Order ID');
-    $sheet->setCellValue('B1', 'Email');
-    $sheet->setCellValue('C1', 'How Did You Hear About Us');
-
-    // Get all order IDs that have the meta key
-    $order_ids = $wpdb->get_col("
-        SELECT post_id 
-        FROM {$wpdb->prefix}postmeta 
-        WHERE meta_key = 'How Did You Hear About Us?'
-    ");
-
-    $row = 2;
-
-    foreach ( $order_ids as $order_id ) {
-        $order = wc_get_order($order_id);
-        if ( ! $order ) continue; // skip if order not found
-
-        $email = $order->get_billing_email();
-
-        $hear_about = $wpdb->get_var( $wpdb->prepare(
-            "SELECT meta_value FROM {$wpdb->prefix}postmeta WHERE post_id = %d AND meta_key = %s",
-            $order_id,
-            'How Did You Hear About Us?'
-        ));
-
-        if ( empty($hear_about) ) continue; // skip orders without this meta
-
-        $sheet->setCellValue('A' . $row, $order_id);
-        $sheet->setCellValue('B' . $row, $email);
-        $sheet->setCellValue('C' . $row, $hear_about);
-
-        $row++;
-    }
-
-    // Send XLSX headers
-    header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    header('Content-Disposition: attachment;filename="wc-hear-about-orders.xlsx"');
-    header('Cache-Control: max-age=0');
-
-    $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
-    $writer->save('php://output');
+    echo wp_json_encode($data, JSON_PRETTY_PRINT);
     exit;
 }
