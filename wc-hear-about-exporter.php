@@ -109,35 +109,47 @@ function wc_hear_export_xlsx() {
         wp_die( 'PhpSpreadsheet not installed.' );
     }
 
+    global $wpdb;
+
     $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
     $sheet = $spreadsheet->getActiveSheet();
 
     // Headers
     $sheet->setCellValue('A1', 'Order ID');
     $sheet->setCellValue('B1', 'Email');
-    $sheet->setCellValue('C1', 'Hear About');
+    $sheet->setCellValue('C1', 'How Did You Hear About Us');
 
-    $orders = wc_get_orders( array(
-        'limit'  => -1,
-        'status' => array( 'wc-completed', 'wc-processing' ),
-    ) );
+    // Get all order IDs that have the meta key
+    $order_ids = $wpdb->get_col("
+        SELECT post_id 
+        FROM {$wpdb->prefix}postmeta 
+        WHERE meta_key = 'How Did You Hear About Us?'
+    ");
 
     $row = 2;
 
-    foreach ( $orders as $order ) {
+    foreach ( $order_ids as $order_id ) {
+        $order = wc_get_order($order_id);
+        if ( ! $order ) continue; // skip if order not found
 
-        $hear_about = $order->get_meta( 'hear_about' );
+        $email = $order->get_billing_email();
 
-        if ( ! empty( $hear_about ) ) {
+        $hear_about = $wpdb->get_var( $wpdb->prepare(
+            "SELECT meta_value FROM {$wpdb->prefix}postmeta WHERE post_id = %d AND meta_key = %s",
+            $order_id,
+            'How Did You Hear About Us?'
+        ));
 
-            $sheet->setCellValue( 'A' . $row, $order->get_id() );
-            $sheet->setCellValue( 'B' . $row, $order->get_billing_email() );
-            $sheet->setCellValue( 'C' . $row, $hear_about );
+        if ( empty($hear_about) ) continue; // skip orders without this meta
 
-            $row++;
-        }
+        $sheet->setCellValue('A' . $row, $order_id);
+        $sheet->setCellValue('B' . $row, $email);
+        $sheet->setCellValue('C' . $row, $hear_about);
+
+        $row++;
     }
 
+    // Send XLSX headers
     header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     header('Content-Disposition: attachment;filename="wc-hear-about-orders.xlsx"');
     header('Cache-Control: max-age=0');
