@@ -37,68 +37,61 @@ function hae_add_admin_menu() {
  */
 function hae_admin_page() {
 
-    if ( ! current_user_can( 'manage_woocommerce' ) ) {
+    global $wpdb;
+
+    echo '<div class="wrap">';
+    echo '<h1>Export "How Did You Hear About Us?" Data</h1>';
+
+    if ( ! function_exists( 'wc_get_orders' ) ) {
+        echo '<p>WooCommerce not loaded.</p></div>';
         return;
     }
 
-    $orders = wc_get_orders( array(
-        'limit'  => 50, // preview only first 50
-        'status' => array( 'wc-completed', 'wc-processing' ),
-    ) );
+    echo '<table class="widefat fixed striped" style="margin-top:20px;">';
+    echo '<thead>
+            <tr>
+                <th>Order ID</th>
+                <th>Email</th>
+                <th>How Did You Hear About Us?</th>
+            </tr>
+          </thead>';
+    echo '<tbody>';
 
-    ?>
-    <div class="wrap">
-        <h1>Export "How did you hear about us?" Data</h1>
+    // Get all order IDs with this meta
+    $order_ids = $wpdb->get_col("
+        SELECT post_id 
+        FROM {$wpdb->prefix}postmeta 
+        WHERE meta_key = 'How Did You Hear About Us?'
+        LIMIT 20
+    ");
 
-        <table class="widefat fixed striped" style="margin-top:20px;">
-            <thead>
-                <tr>
-                    <th>Order ID</th>
-                    <th>Email</th>
-                    <th>Hear About</th>
-                </tr>
-            </thead>
-            <tbody>
-                <?php
-                if ( ! empty( $orders ) ) :
+    foreach ($order_ids as $order_id) {
+        $order = wc_get_order($order_id);
+        $email = $order->get_billing_email();
+        $hear_about = $wpdb->get_var($wpdb->prepare(
+            "SELECT meta_value FROM {$wpdb->prefix}postmeta WHERE post_id = %d AND meta_key = %s",
+            $order_id,
+            'How Did You Hear About Us?'
+        ));
 
-                    foreach ( $orders as $order ) :
+        echo "<tr>";
+        echo "<td>" . esc_html($order_id) . "</td>";
+        echo "<td>" . esc_html($email) . "</td>";
+        echo "<td>" . esc_html($hear_about) . "</td>";
+        echo "</tr>";
+    }
 
-                        $hear_about = $order->get_meta( 'hear_about' );
+    echo '</tbody></table>';
 
-                        if ( empty( $hear_about ) ) {
-                            continue;
-                        }
-                        ?>
-                        <tr>
-                            <td><?php echo esc_html( $order->get_id() ); ?></td>
-                            <td><?php echo esc_html( $order->get_billing_email() ); ?></td>
-                            <td><?php echo esc_html( $hear_about ); ?></td>
-                        </tr>
-                        <?php
+    echo '<br>';
 
-                    endforeach;
+    // Export button
+    echo '<a href="' . admin_url('admin-post.php?action=wc_hear_export_xlsx') . '" 
+              class="button button-primary">
+              Export as XLSX
+          </a>';
 
-                else :
-                    ?>
-                    <tr>
-                        <td colspan="3">No data found.</td>
-                    </tr>
-                    <?php
-                endif;
-                ?>
-            </tbody>
-        </table>
-
-        <br>
-
-        <a href="<?php echo admin_url( 'admin-post.php?action=wc_hear_export_xlsx' ); ?>" 
-           class="button button-primary">
-            Export as XLSX
-        </a>
-
-    </div>
-    <?php
+    echo '</div>';
 }
 
 /**
