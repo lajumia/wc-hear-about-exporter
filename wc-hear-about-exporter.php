@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Hear About Us Exporter
  * Description: Preview and export "How Did You Hear About Us?" data as JSON.
- * Version: 1.0.1
+ * Version: 1.0.0
  * Author: Md Laju Miah
  */
 
@@ -28,6 +28,24 @@ function hae_admin_page() {
 
     echo '<div class="wrap">';
     echo '<h1>Preview "How Did You Hear About Us?" Data</h1>';
+
+        // --- Summary Header ---
+    // Total number of orders with the meta key
+    $total_orders = $wpdb->get_var($wpdb->prepare("
+        SELECT COUNT(*) 
+        FROM {$wpdb->prefix}postmeta
+        WHERE meta_key = %s
+    ", 'How Did You Hear About Us?'));
+
+    $preview_limit = 20; // number of rows in preview
+
+    echo '<div style="display:flex; gap:40px; margin-bottom:20px; align-items:center;">';
+
+    echo '<div><strong>Total orders:</strong> ' . esc_html($total_orders) . '</div>';
+    echo '<div><strong>Showing latest:</strong> ' . esc_html($preview_limit) . ' orders</div>';
+    echo '<div><strong>Last updated:</strong> ' . esc_html(date('Y-m-d H:i:s')) . '</div>';
+
+    echo '</div>';
 
     // Table header
     echo '<table class="widefat fixed striped" style="margin-top:20px;">';
